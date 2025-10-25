@@ -21,3 +21,8 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+.venv/
+venv/
+.DS_Store
+.idea/
+.vscode/
