@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic>=2
+psycopg[binary,pool]
+pgvector
+openai>=1.40.0
+
+
+SQLAlchemy>=2.0
+psycopg2-binary
+langchain-huggingface
+langchain-text-splitters
+pandas
+sentence-transformers==2.6.1
+
