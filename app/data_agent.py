@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import select, text, func
+from sqlalchemy import select, text, func, delete, update as sa_update
 from sqlalchemy.orm import Session
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -41,32 +41,39 @@ class TicketDataAgent:
         self.indexer = IndexerAgent(engine, self.embedder)
 
     def create_ticket(self, **kwargs):
-        ticket = Ticket(
-            ticket_id=kwargs.get("ticket_id"),
-            requester_id=kwargs.get("requester_id"),
-            subject=kwargs.get("subject"),
-            body=kwargs.get("body"),
-            answer=kwargs.get("answer"),
-            suggested_answer=kwargs.get("suggested_answer"),
-            type=kwargs.get("type"),
-            priority=kwargs.get("priority"),
-            assigned_team_id=kwargs.get("assigned_team_id"),
-            assigned_team_user_id=kwargs.get("assigned_team_user_id"),
-            suggested_assigned_team_id=kwargs.get("suggested_assigned_team_id"),
-            status=kwargs.get("status", "open"),
-            created_at=datetime.utcnow(),
-        )
-        # tags (up to 8)
-        tags = kwargs.get("tags") or []
-        for i, tag in enumerate(tags[:8], start=1):
-            setattr(ticket, f"tag_{i}", tag)
+        def _nz(v):
+            return None if v is None or (isinstance(v, str) and v.strip() == "") else v
 
-        self.session.add(ticket)
-        self.session.commit()
+        try:
+            ticket = Ticket(
+                ticket_id=kwargs.get("ticket_id"),
+                requester_id=kwargs.get("requester_id"),
+                subject=kwargs.get("subject"),
+                body=kwargs.get("body"),
+                answer=kwargs.get("answer"),
+                suggested_answer=kwargs.get("suggested_answer"),
+                type=kwargs.get("type"),
+                priority=kwargs.get("priority"),
+                assigned_team_id=_nz(kwargs.get("assigned_team_id")),            # will be None if missing/blank
+                assigned_team_user_id=kwargs.get("assigned_team_user_id"),
+                suggested_assigned_team_id=_nz(kwargs.get("suggested_assigned_team_id")),  # None if missing/blank
+                status=kwargs.get("status", "open"),
+                created_at=datetime.utcnow(),
+            )
+            tags = kwargs.get("tags") or []
+            for i, tag in enumerate(tags[:8], start=1):
+                setattr(ticket, f"tag_{i}", tag)
 
-        if ticket.body:
-            self.indexer.index_ticket(ticket.ticket_id, ticket.body)
-        return ticket
+            self.session.add(ticket)
+            self.session.commit()  # get ticket_id
+
+            if ticket.body:
+                self.indexer.index_ticket(ticket.ticket_id, ticket.body)
+            return ticket
+
+        except Exception:
+            self.session.rollback()
+            raise
 
     def read_ticket(self, ticket_id: int):
         t = self.session.query(Ticket).filter_by(ticket_id=ticket_id).first()

@@ -18,6 +18,7 @@ def top_k_similar(qvec, top_k=5, exclude_ticket_id=None):
         SELECT
             t.ticket_id,
             t.subject AS title,
+            t.body AS body,
             t.answer,
             t.assigned_team_id,
             tm.team_name AS assigned_team_name,
@@ -26,7 +27,7 @@ def top_k_similar(qvec, top_k=5, exclude_ticket_id=None):
         FROM ticket_embeddings te
         JOIN tickets t   ON te.ticket_id = t.ticket_id
         LEFT JOIN teams tm ON t.assigned_team_id = tm.team_id
-        WHERE (:exclude_id IS NULL OR te.ticket_id <> :exclude_id)   -- ✅ explicit exclusion
+        WHERE (:exclude_id IS NULL OR te.ticket_id <> :exclude_id)  
         ORDER BY score ASC
         LIMIT :top_k;
     """)

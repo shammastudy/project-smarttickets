@@ -2,15 +2,24 @@ fastapi
 uvicorn[standard]
 python-dotenv
 pydantic>=2
+
+# DB + vector
+SQLAlchemy>=2.0
 psycopg[binary,pool]
 pgvector
+
+# OpenAI SDK
 openai>=1.40.0
 
+# LangChain family (compatible with py311)
+langchain-core==0.3.79
+langchain-huggingface==0.1.0
+langchain-text-splitters==0.3.11
+langchain-openai==0.3.33
 
-SQLAlchemy>=2.0
-psycopg2-binary
-langchain-huggingface
-langchain-text-splitters
-pandas
+# Embeddings stack
 sentence-transformers==2.6.1
+torch==2.3.1
 
+# Utils
+pandas

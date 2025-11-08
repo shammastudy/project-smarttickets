@@ -74,7 +74,7 @@ class AssignmentAgent:
 
         # 5️⃣ Compose the initial LLM prompt
         prompt = f"""
-You are an assignment agent. Choose the correct support team **only** from the provided list.
+You are a helpdesk employee, responsible for assigning tickets to different teams with different specialities. Choose the correct support team **only** from the provided list.
 
 New ticket:
 {query_text}

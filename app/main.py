@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from app.schemas import (
     SimilarRequest, SimilarResponse, SimilarItem,
-    AssignRequest, AssignResponse, SolutionRequest, SolutionResponse, SolutionSource
+    AssignRequest, AssignResponse, SolutionRequest, SolutionResponse, SolutionSource, CreateTicketRequest, CreateTicketResponse
 )
 from app.data_agent import TicketDataAgent
 from app.assignment_agent import AssignmentAgent
@@ -127,3 +127,27 @@ def solution(req: SolutionRequest) -> SolutionResponse:
         persisted=bool(persisted),
         message="suggested_answer updated." if persisted else "Could not persist; ticket not found."
     )
+
+
+
+# ---------- CREATE TICKET ----------
+@app.post("/tickets", response_model=CreateTicketResponse)
+def create_ticket(req: CreateTicketRequest) -> CreateTicketResponse:
+    try:
+        payload = req.model_dump(exclude_unset=True)
+
+        # 🚫 Remove team fields if not provided or blank (prevents FK violations)
+        for fk in ("assigned_team_id", "suggested_assigned_team_id"):
+            if fk in payload and (payload[fk] is None or str(payload[fk]).strip() == ""):
+                payload.pop(fk, None)
+
+        ticket = data_agent.create_ticket(**payload)
+        indexed_chunks = data_agent.count_ticket_embeddings(ticket.ticket_id)
+
+        return CreateTicketResponse(
+            ticket_id=ticket.ticket_id,
+            indexed_chunks=indexed_chunks,
+            message="Ticket created and indexed." if indexed_chunks > 0 else "Ticket created (no body or no chunks)."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create ticket: {e}")
