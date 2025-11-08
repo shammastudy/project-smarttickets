@@ -6,12 +6,13 @@ pydantic>=2
 # DB + vector
 SQLAlchemy>=2.0
 psycopg[binary,pool]
+psycopg2-binary
 pgvector
 
 # OpenAI SDK
 openai>=1.40.0
 
-# LangChain family (compatible with py311)
+# LangChain pins you’re using locally
 langchain-core==0.3.79
 langchain-huggingface==0.1.0
 langchain-text-splitters==0.3.11
@@ -19,7 +20,7 @@ langchain-openai==0.3.33
 
 # Embeddings stack
 sentence-transformers==2.6.1
-torch==2.3.1
+torch>=2.5.0,<2.8   # <-- changed; compatible on Render
 
 # Utils
 pandas
