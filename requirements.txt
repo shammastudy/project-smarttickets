@@ -24,3 +24,6 @@ torch>=2.5.0,<2.8   # <-- changed; compatible on Render
 
 # Utils
 pandas
+
+pydantic-settings
+pydantic[email]>=2.0

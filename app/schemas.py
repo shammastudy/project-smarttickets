@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List
 
 # ----- Requests -----
@@ -65,3 +65,40 @@ class CreateTicketResponse(BaseModel):
     ticket_id: int
     indexed_chunks: int = 0
     message: str = "Created"
+
+
+
+# Notification part
+
+class NotifyBase(BaseModel):
+    ticket_id: int
+
+# 1) Ticket Submitted – to user
+class TicketSubmittedUserPayload(NotifyBase):
+    recipient: EmailStr
+    user_name: Optional[str] = None
+
+# 2) New Ticket Received – to helpdesk
+class NewTicketReceivedPayload(NotifyBase):
+    helpdesk_email: Optional[EmailStr] = None  # fallback to settings.DEPARTMENT_EMAIL
+
+# 3) Ticket Assigned – to user
+class TicketAssignedUserPayload(NotifyBase):
+    recipient: EmailStr
+    team_name: str
+    user_name: Optional[str] = None
+
+# 4) New Ticket Assigned – to team
+class TicketAssignedTeamPayload(NotifyBase):
+    team_name: str
+    team_email: Optional[EmailStr] = None  # if not provided, fallback to DEPARTMENT_EMAIL
+
+# 5) Ticket Resolved – to user
+class TicketResolvedUserPayload(NotifyBase):
+    recipient: EmailStr
+    user_name: Optional[str] = None
+
+# 6) Ticket Canceled – to user
+class TicketCanceledUserPayload(NotifyBase):
+    recipient: EmailStr
+    user_name: Optional[str] = None

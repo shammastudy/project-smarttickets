@@ -1,8 +1,6 @@
 from fastapi import FastAPI, HTTPException
-from app.schemas import (
-    SimilarRequest, SimilarResponse, SimilarItem,
-    AssignRequest, AssignResponse, SolutionRequest, SolutionResponse, SolutionSource, CreateTicketRequest, CreateTicketResponse
-)
+import app.schemas as schemas
+
 from app.data_agent import TicketDataAgent
 from app.assignment_agent import AssignmentAgent
 from app.solution_agent import SolutionAgent
@@ -20,8 +18,8 @@ def health():
     return {"status": "ok"}
 
 # ---------- SIMILAR (by ticket_id) ----------
-@app.post("/similar", response_model=SimilarResponse)
-def similar(req: SimilarRequest) -> SimilarResponse:
+@app.post("/similar", response_model=schemas.SimilarResponse)
+def similar(req: schemas.SimilarRequest) -> schemas.SimilarResponse:
     # 1) fetch ticket text
     t = data_agent.get_ticket_text(req.ticket_id)
     if not t:
@@ -47,8 +45,8 @@ def similar(req: SimilarRequest) -> SimilarResponse:
 
 
 # ---------- ASSIGN (by ticket_id) ----------
-@app.post("/assign", response_model=AssignResponse)
-def assign(req: AssignRequest) -> AssignResponse:
+@app.post("/assign", response_model=schemas.AssignResponse)
+def assign(req: schemas.AssignRequest) -> schemas.AssignResponse:
     # 1) fetch ticket text
     t = data_agent.get_ticket_text(req.ticket_id)
     if not t:
@@ -92,8 +90,8 @@ def assign(req: AssignRequest) -> AssignResponse:
     )
 
 
-@app.post("/solution", response_model=SolutionResponse)
-def solution(req: SolutionRequest) -> SolutionResponse:
+@app.post("/solution", response_model=schemas.SolutionResponse)
+def solution(req: schemas.SolutionRequest) -> schemas.SolutionResponse:
     # 1) fetch subject/body
     t = data_agent.get_ticket_text(req.ticket_id)
     if not t:
@@ -131,8 +129,8 @@ def solution(req: SolutionRequest) -> SolutionResponse:
 
 
 # ---------- CREATE TICKET ----------
-@app.post("/tickets", response_model=CreateTicketResponse)
-def create_ticket(req: CreateTicketRequest) -> CreateTicketResponse:
+@app.post("/tickets", response_model=schemas.CreateTicketResponse)
+def create_ticket(req: schemas.CreateTicketRequest) -> schemas.CreateTicketResponse:
     try:
         payload = req.model_dump(exclude_unset=True)
 
@@ -151,3 +149,97 @@ def create_ticket(req: CreateTicketRequest) -> CreateTicketResponse:
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create ticket: {e}")
+
+
+
+
+# ------- Notifications Part --------
+
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from app.mailer import (
+    Mailer,
+    tpl_ticket_submitted_user,
+    tpl_new_ticket_received_hd,
+    tpl_ticket_assigned_user,
+    tpl_ticket_assigned_team,
+    tpl_ticket_resolved_user,
+    tpl_ticket_canceled_user,
+)
+from app.config import settings
+mailer = Mailer()
+
+
+
+# ---------- NOTIFICATIONS ----------
+# 1) Ticket Submitted Successfully – to user (status: OPEN)
+@app.post("/notify/ticket-submitted")
+def notify_ticket_submitted(payload: schemas.TicketSubmittedUserPayload):
+    try:
+        subj, html = tpl_ticket_submitted_user(payload.ticket_id, payload.user_name)
+        result = mailer.send_email(to=payload.recipient, subject=subj, html_body=html, cc=settings.DEPARTMENT_EMAIL)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Mail send failed: {e}")
+
+
+# 2) New Ticket Received – to helpdesk (status: OPEN)
+@app.post("/notify/new-ticket-received")
+def notify_new_ticket_received(payload: schemas.NewTicketReceivedPayload):
+    to = payload.helpdesk_email or settings.DEPARTMENT_EMAIL
+    if not to:
+        raise HTTPException(status_code=400, detail="No helpdesk_email provided and DEPARTMENT_EMAIL is not set.")
+    try:
+        subj, html = tpl_new_ticket_received_hd(payload.ticket_id)
+        result = mailer.send_email(to=to, subject=subj, html_body=html)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Mail send failed: {e}")
+
+
+# 3) Ticket Assigned – To user (status: ASSIGNED)
+@app.post("/notify/ticket-assigned-user")
+def notify_ticket_assigned_user(payload: schemas.TicketAssignedUserPayload):
+    try:
+        subj, html = tpl_ticket_assigned_user(payload.ticket_id, payload.user_name, payload.team_name)
+        result = mailer.send_email(to=payload.recipient, subject=subj, html_body=html, cc=settings.DEPARTMENT_EMAIL)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Mail send failed: {e}")
+
+
+# 4) New Ticket Assigned to Your Team – To support team (status: ASSIGNED)
+@app.post("/notify/ticket-assigned-team")
+def notify_ticket_assigned_team(payload: schemas.TicketAssignedTeamPayload):
+    to = payload.team_email or settings.DEPARTMENT_EMAIL
+    if not to:
+        raise HTTPException(status_code=400, detail="No team_email provided and DEPARTMENT_EMAIL is not set.")
+    try:
+        subj, html = tpl_ticket_assigned_team(payload.ticket_id, payload.team_name)
+        result = mailer.send_email(to=to, subject=subj, html_body=html)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Mail send failed: {e}")
+
+
+# 5) Ticket Resolved – To user (status: RESOLVED)
+@app.post("/notify/ticket-resolved")
+def notify_ticket_resolved(payload: schemas.TicketResolvedUserPayload):
+    try:
+        subj, html = tpl_ticket_resolved_user(payload.ticket_id, payload.user_name)
+        result = mailer.send_email(to=payload.recipient, subject=subj, html_body=html, cc=settings.DEPARTMENT_EMAIL)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Mail send failed: {e}")
+
+
+# 6) Ticket Canceled – To user (status: CANCELED)
+@app.post("/notify/ticket-canceled")
+def notify_ticket_canceled(payload: schemas.TicketCanceledUserPayload):
+    try:
+        subj, html = tpl_ticket_canceled_user(payload.ticket_id, payload.user_name)
+        result = mailer.send_email(to=payload.recipient, subject=subj, html_body=html, cc=settings.DEPARTMENT_EMAIL)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Mail send failed: {e}")
+
