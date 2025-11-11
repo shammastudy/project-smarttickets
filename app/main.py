@@ -29,7 +29,7 @@ def similar(req: schemas.SimilarRequest) -> schemas.SimilarResponse:
     body = t.get("body") or ""
     text = f"Subject: {subject}\nBody: {body}".strip()
     if not text:
-        return SimilarResponse(results=[])
+        return schemas.SimilarResponse(results=[])
 
     # 2) ensure embeddings exist for this ticket (safe no-op if already indexed)
     try:
@@ -41,7 +41,7 @@ def similar(req: schemas.SimilarRequest) -> schemas.SimilarResponse:
     # 3) embed & search
     qvec = embed_text(text)
     rows = top_k_similar(qvec, top_k=req.top_k, exclude_ticket_id=req.ticket_id)  # ✅ pass exclude id
-    return SimilarResponse(results=[SimilarItem(**r) for r in rows])
+    return schemas.SimilarResponse(results=[schemas.SimilarItem(**r) for r in rows])
 
 
 # ---------- ASSIGN (by ticket_id) ----------
@@ -69,7 +69,7 @@ def assign(req: schemas.AssignRequest) -> schemas.AssignResponse:
 
     # 4) persist suggestion if valid
     if not assigned_team_id:
-        return AssignResponse(
+        return schemas.AssignResponse(
             ticket_id=req.ticket_id,
             assigned_team_id="",
             assigned_team_name="Unassigned",
@@ -80,7 +80,7 @@ def assign(req: schemas.AssignRequest) -> schemas.AssignResponse:
 
     persisted = data_agent.update_suggested_team(req.ticket_id, assigned_team_id)
 
-    return AssignResponse(
+    return schemas.AssignResponse(
         ticket_id=req.ticket_id,
         assigned_team_id=assigned_team_id,
         assigned_team_name=assigned_team_name,
@@ -113,12 +113,12 @@ def solution(req: schemas.SolutionRequest) -> schemas.SolutionResponse:
         top_k=req.top_k
     )
     solution_text = result.get("solution", "No solution generated.")
-    sources = [SolutionSource(**s) for s in result.get("sources", [])]
+    sources = [schemas.SolutionSource(**s) for s in result.get("sources", [])]
 
     # 4) persist suggested_answer
     persisted = data_agent.update_suggested_answer(req.ticket_id, solution_text)
 
-    return SolutionResponse(
+    return schemas.SolutionResponse(
         ticket_id=req.ticket_id,
         solution=solution_text,
         sources=sources,
@@ -142,7 +142,7 @@ def create_ticket(req: schemas.CreateTicketRequest) -> schemas.CreateTicketRespo
         ticket = data_agent.create_ticket(**payload)
         indexed_chunks = data_agent.count_ticket_embeddings(ticket.ticket_id)
 
-        return CreateTicketResponse(
+        return schemas.CreateTicketResponse(
             ticket_id=ticket.ticket_id,
             indexed_chunks=indexed_chunks,
             message="Ticket created and indexed." if indexed_chunks > 0 else "Ticket created (no body or no chunks)."
