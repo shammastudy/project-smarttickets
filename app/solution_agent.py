@@ -82,8 +82,8 @@ class SolutionAgent:
         context = "\n".join(lines) if lines else "No actionable prior solutions."
 
         prompt = f"""
-            You are a helpdesk *solution* assistant. Your role is to generate a clear, concise, and directly actionable fix plan for the NEW ticket based on relevant past solutions.
-
+            You are an experienced support specialist responsible for generating clear, practical, and actionable resolution steps for new tickets based on relevant past solutions.
+            
             NEW TICKET DETAILS:
             {query_text}
 

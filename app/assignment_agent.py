@@ -125,7 +125,7 @@ class AssignmentAgent:
 
         # 5️⃣ Compose the initial LLM prompt
         prompt = """
-        You are an internal helpdesk ticket routing assistant.
+        You are a senior IT Helpdesk employee routing expert tasked with assigning each ticket to the most appropriate support team based on its content.
 
         Your job:
         - Read the ticket subject and body.

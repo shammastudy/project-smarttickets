@@ -290,7 +290,7 @@ def llm_grade_solution(
         }
 
     prompt = """
-        You are an expert IT helpdesk solution evaluator.
+        You are an IT service evaluation expert tasked with determining how accurately a suggested solution matches the actual resolution steps.
 
         Your job is to compare two solutions for the SAME ticket:
         1) The existing reference solution (what the helpdesk actually used).
