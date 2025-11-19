@@ -168,7 +168,7 @@ class AssignmentAgent:
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user_msg},
             ],
-            #temperature=0,
+            temperature=0,
             response_format={"type": "json_object"},
         )
 

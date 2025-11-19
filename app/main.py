@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 import app.schemas as schemas
-from app.evaluation import run_assignment_evaluation
 from app.data_agent import TicketDataAgent
 from app.assignment_agent import AssignmentAgent
 from app.solution_agent import SolutionAgent
 from app.retriever import embed_text, top_k_similar
 from app.db import engine
+from app.evaluation import run_assignment_evaluation, run_solution_evaluation
+
 
 
 app = FastAPI(title="Smart Tickets – API", version="1.0.0")
@@ -268,3 +269,25 @@ def evaluate_assignment(req: schemas.AssignmentEvalRequest) -> schemas.Assignmen
         raise HTTPException(status_code=500, detail=f"Evaluation failed: {e}")
 
     return schemas.AssignmentEvalResponse(**stats)
+
+
+@app.post("/evaluate/solution", response_model=schemas.SolutionEvalResponse)
+def evaluate_solution(req: schemas.SolutionEvalRequest) -> schemas.SolutionEvalResponse:
+    """
+    Evaluate the SolutionAgent against existing tickets.
+
+    - Select up to `limit` tickets that already have a reference solution (answer).
+    - For each, generate a model solution and compare it to the reference using an LLM judge.
+    - Return aggregate stats (average similarity, counts per category).
+    """
+    try:
+        stats = run_solution_evaluation(
+            data_agent=data_agent,
+            solution_agent=solution_agent,
+            limit=req.limit,
+            top_k=req.top_k,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Solution evaluation failed: {e}")
+
+    return schemas.SolutionEvalResponse(**stats)

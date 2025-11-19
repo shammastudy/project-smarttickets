@@ -121,3 +121,18 @@ class AssignmentEvalResponse(BaseModel):
     correct: int
     incorrect: int
     accuracy: float  # percentage
+
+
+class SolutionEvalRequest(BaseModel):
+    limit: int = 50
+    top_k: int = 5
+
+
+class SolutionEvalResponse(BaseModel):
+    total_evaluated: int
+    avg_similarity: float
+    avg_similarity_percent: float
+    good_match: int
+    partial_match: int
+    mismatch: int
+    failed: int
