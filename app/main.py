@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 import app.schemas as schemas
-from app.data_agent import TicketDataAgent
+from app.repository import TicketDataAgent
 from app.assignment_agent import AssignmentAgent
 from app.solution_agent import SolutionAgent
 from app.retriever import embed_text, top_k_similar
@@ -11,7 +11,7 @@ from app.evaluation import run_assignment_evaluation, run_solution_evaluation
 
 app = FastAPI(title="Smart Tickets – API", version="1.0.0")
 
-data_agent = TicketDataAgent()
+repository = TicketDataAgent()
 assign_agent = AssignmentAgent(engine)
 solution_agent = SolutionAgent()
 
@@ -23,7 +23,7 @@ def health():
 @app.post("/similar", response_model=schemas.SimilarResponse)
 def similar(req: schemas.SimilarRequest) -> schemas.SimilarResponse:
     # 1) fetch ticket text
-    t = data_agent.get_ticket_text(req.ticket_id)
+    t = repository.get_ticket_text(req.ticket_id)
     if not t:
         raise HTTPException(status_code=404, detail=f"ticket_id {req.ticket_id} not found")
 
@@ -35,7 +35,7 @@ def similar(req: schemas.SimilarRequest) -> schemas.SimilarResponse:
 
     # 2) ensure embeddings exist for this ticket (safe no-op if already indexed)
     try:
-        data_agent.ensure_indexed(req.ticket_id)
+        repository.ensure_indexed(req.ticket_id)
     except Exception as e:
         # not fatal; proceed anyway
         print(f"Indexing skipped/failed for ticket {req.ticket_id}: {e}")
@@ -50,7 +50,7 @@ def similar(req: schemas.SimilarRequest) -> schemas.SimilarResponse:
 @app.post("/assign", response_model=schemas.AssignResponse)
 def assign(req: schemas.AssignRequest) -> schemas.AssignResponse:
     # 1) fetch ticket text
-    t = data_agent.get_ticket_text(req.ticket_id)
+    t = repository.get_ticket_text(req.ticket_id)
     if not t:
         raise HTTPException(status_code=404, detail=f"ticket_id {req.ticket_id} not found")
 
@@ -59,7 +59,7 @@ def assign(req: schemas.AssignRequest) -> schemas.AssignResponse:
 
     # 2) ensure embeddings exist for this ticket (optional safeguard)
     try:
-        data_agent.ensure_indexed(req.ticket_id)
+        repository.ensure_indexed(req.ticket_id)
     except Exception as e:
         print(f"Indexing skipped/failed for ticket {req.ticket_id}: {e}")
 
@@ -80,7 +80,7 @@ def assign(req: schemas.AssignRequest) -> schemas.AssignResponse:
             message="No valid team_id returned; not persisted."
         )
 
-    persisted = data_agent.update_suggested_team(req.ticket_id, assigned_team_id)
+    persisted = repository.update_suggested_team(req.ticket_id, assigned_team_id)
 
     return schemas.AssignResponse(
         ticket_id=req.ticket_id,
@@ -95,7 +95,7 @@ def assign(req: schemas.AssignRequest) -> schemas.AssignResponse:
 @app.post("/solution", response_model=schemas.SolutionResponse)
 def solution(req: schemas.SolutionRequest) -> schemas.SolutionResponse:
     # 1) fetch subject/body
-    t = data_agent.get_ticket_text(req.ticket_id)
+    t = repository.get_ticket_text(req.ticket_id)
     if not t:
         raise HTTPException(status_code=404, detail=f"ticket_id {req.ticket_id} not found")
     subject = t.get("subject") or ""
@@ -103,7 +103,7 @@ def solution(req: schemas.SolutionRequest) -> schemas.SolutionResponse:
 
     # 2) (optional) ensure indexed
     try:
-        data_agent.ensure_indexed(req.ticket_id)
+        repository.ensure_indexed(req.ticket_id)
     except Exception as e:
         print(f"Indexing skipped/failed for ticket {req.ticket_id}: {e}")
 
@@ -118,7 +118,7 @@ def solution(req: schemas.SolutionRequest) -> schemas.SolutionResponse:
     sources = [schemas.SolutionSource(**s) for s in result.get("sources", [])]
 
     # 4) persist suggested_answer
-    persisted = data_agent.update_suggested_answer(req.ticket_id, solution_text)
+    persisted = repository.update_suggested_answer(req.ticket_id, solution_text)
 
     return schemas.SolutionResponse(
         ticket_id=req.ticket_id,
@@ -141,8 +141,8 @@ def create_ticket(req: schemas.CreateTicketRequest) -> schemas.CreateTicketRespo
             if fk in payload and (payload[fk] is None or str(payload[fk]).strip() == ""):
                 payload.pop(fk, None)
 
-        ticket = data_agent.create_ticket(**payload)
-        indexed_chunks = data_agent.count_ticket_embeddings(ticket.ticket_id)
+        ticket = repository.create_ticket(**payload)
+        indexed_chunks = repository.count_ticket_embeddings(ticket.ticket_id)
 
         return schemas.CreateTicketResponse(
             ticket_id=ticket.ticket_id,
@@ -260,7 +260,7 @@ def evaluate_assignment(req: schemas.AssignmentEvalRequest) -> schemas.Assignmen
     """
     try:
         stats = run_assignment_evaluation(
-            data_agent=data_agent,
+            repository=repository,
             assign_agent=assign_agent,
             limit=req.limit,
             top_k=req.top_k,
@@ -282,7 +282,7 @@ def evaluate_solution(req: schemas.SolutionEvalRequest) -> schemas.SolutionEvalR
     """
     try:
         stats = run_solution_evaluation(
-            data_agent=data_agent,
+            repository=repository,
             solution_agent=solution_agent,
             limit=req.limit,
             top_k=req.top_k,

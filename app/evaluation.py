@@ -6,7 +6,7 @@ from sqlalchemy import select
 from openai import OpenAI
 
 from .models import Ticket
-from .data_agent import TicketDataAgent
+from .repository import TicketDataAgent
 from .assignment_agent import AssignmentAgent
 from .solution_agent import SolutionAgent
 
@@ -15,7 +15,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
 
 def run_assignment_evaluation(
-    data_agent: TicketDataAgent,
+    repository: TicketDataAgent,
     assign_agent: AssignmentAgent,
     limit: int = 3000,
     top_k: int = 5,
@@ -36,7 +36,7 @@ def run_assignment_evaluation(
       - accuracy (percentage)
     """
 
-    session = data_agent.session
+    session = repository.session
 
     # 1) Get up to `limit` tickets that already have assigned_team_id
     rows = (
@@ -77,7 +77,7 @@ def run_assignment_evaluation(
 
         # 2) Ensure embeddings exist for this ticket
         try:
-            data_agent.ensure_indexed(ticket_id)
+            repository.ensure_indexed(ticket_id)
         except Exception as e:
             print(f"[EVAL] Failed to index ticket {ticket_id}: {e}")
 
@@ -118,7 +118,7 @@ def run_assignment_evaluation(
 
 
 def run_solution_evaluation(
-    data_agent: TicketDataAgent,
+    repository: TicketDataAgent,
     solution_agent: SolutionAgent,
     limit: int = 500,
     top_k: int = 20,
@@ -143,7 +143,7 @@ def run_solution_evaluation(
       - failed (LLM or generation errors)
     """
 
-    session = data_agent.session
+    session = repository.session
 
     # 1) Get up to `limit` tickets that already have a reference solution
     rows = (
@@ -188,7 +188,7 @@ def run_solution_evaluation(
 
         # 2) Ensure indexed (optional but aligned with how you use SolutionAgent)
         try:
-            data_agent.ensure_indexed(ticket_id)
+            repository.ensure_indexed(ticket_id)
         except Exception as e:
             print(f"[SOLUTION EVAL] Failed to index ticket {ticket_id}: {e}")
 
