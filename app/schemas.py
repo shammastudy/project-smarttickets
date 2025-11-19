@@ -102,3 +102,22 @@ class TicketResolvedUserPayload(NotifyBase):
 class TicketCanceledUserPayload(NotifyBase):
     recipient: EmailStr
     user_name: Optional[str] = None
+
+
+
+# ----- Assignment Evaluation Schemas -----
+
+from pydantic import BaseModel, Field
+
+class AssignmentEvalRequest(BaseModel):
+    # How many tickets to evaluate (max 3000 by default)
+    limit: int = Field(3000, gt=0, le=10000)
+    # top_k for retriever/assignment agent
+    top_k: int = Field(5, gt=0, le=100)
+
+
+class AssignmentEvalResponse(BaseModel):
+    total_evaluated: int
+    correct: int
+    incorrect: int
+    accuracy: float  # percentage

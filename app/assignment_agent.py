@@ -10,6 +10,8 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 # ------------------------------
 # Helper functions
 # ------------------------------
+
+
 def safe_parse_json(text_in: str) -> dict:
     if not isinstance(text_in, str):
         return {"assigned_team_id": "", "assigned_team_name": "", "reasoning": "Non-string model output."}
@@ -27,8 +29,19 @@ def safe_parse_json(text_in: str) -> dict:
 
 def load_all_teams() -> List[Dict[str, str]]:
     with engine.begin() as conn:
-        rows = conn.execute(text("SELECT team_id, team_name FROM teams ORDER BY team_name")).mappings().all()
-    return [{"team_id": r["team_id"], "team_name": r["team_name"]} for r in rows]
+        rows = conn.execute(text("""
+            SELECT team_id, team_name, team_description
+            FROM teams
+            ORDER BY team_name
+        """)).mappings().all()
+
+    return [
+        {
+            "team_id": r["team_id"],
+            "team_name": r["team_name"]
+        }
+        for r in rows
+    ]
 
 def normalize(s: str) -> str:
     return (s or "").strip().lower()
@@ -44,6 +57,7 @@ class AssignmentAgent:
 
     # ✅ Main public method
     def assign_team(self, ticket_id:int, subject: str, body: str, top_k: int = 5):
+        
         # 1️⃣ Load valid teams from DB
         candidates = load_all_teams()
         if not candidates:
@@ -72,31 +86,93 @@ class AssignmentAgent:
         # 4️⃣ Build team list JSON
         options_json = json.dumps(candidates, ensure_ascii=False)
 
+        # 3️⃣ Build context for prompt
+        examples = []
+        neighbor_team_ids = set()
+        for t in sims:
+            team_label = t.get("assigned_team_name") or "Unknown"
+            if t.get("assigned_team_id"):
+                neighbor_team_ids.add(normalize(t["assigned_team_id"]))
+
+            examples.append(
+                f"Example ticket:\n"
+                f"- Subject: {t.get('title')}\n"
+                f"- Body: {t.get('body') or 'N/A'}\n"
+                f"- Resolved by team: {team_label}\n"
+                f"---"
+            )
+        examples_text = "\n".join(examples) if examples else "No prior examples."
+
+        # 4️⃣ Build a *reduced* team list focusing on neighbor teams
+        neighbor_candidates = [
+            c for c in candidates
+            if normalize(c["team_id"]) in neighbor_team_ids
+        ]
+
+        # Fallback: if neighbors give nothing, use all teams
+        if not neighbor_candidates:
+            reduced_candidates = candidates
+        else:
+            # keep neighbors first, then a few others as backup
+            other_candidates = [
+                c for c in candidates
+                if normalize(c["team_id"]) not in neighbor_team_ids
+            ]
+            reduced_candidates = neighbor_candidates + other_candidates[:5]  # limit total list size
+
+        options_json = json.dumps(reduced_candidates, ensure_ascii=False)
+
+
         # 5️⃣ Compose the initial LLM prompt
-        prompt = f"""
-You are a helpdesk employee, responsible for assigning tickets to different teams with different specialities. Choose the correct support team **only** from the provided list.
+        prompt = """
+        You are an internal helpdesk ticket routing assistant.
 
-New ticket:
-{query_text}
+        Your job:
+        - Read the ticket subject and body.
+        - Use the examples of similar resolved tickets.
+        - Choose the team whose responsibilities best match the problem.
+        - Choose exactly ONE support team from the provided JSON list.
+        - Never invent new teams. Only use teams from the list.
+        - Always return a valid JSON object with the required keys.
+        """.strip()
 
-Similar resolved tickets (with their teams):
-{examples_text}
+        user_msg = f"""
+        New ticket:
+        {query_text}
 
-Valid teams (choose exactly one by ID and name):
-{options_json}
+        Similar resolved tickets (with the teams that handled them):
+        {examples_text}
 
-Return ONLY a strict JSON object with these EXACT keys:
-{{"assigned_team_id": "<id from list>", "assigned_team_name": "<matching name from list>", "reasoning": "<short reason>"}}
-No extra text, no code fences, no markdown.
-""".strip()
+        Valid teams (JSON list with their descriptions):
+        {options_json}
 
-        # 6️⃣ Call the LLM
+        Guidelines:
+        - First, think about which teams resolved the similar tickets.
+        - Prefer teams that already resolved similar issues.
+        - If multiple teams look possible, pick the one that:
+        - Appears most often among similar tickets, or
+        - Has the closest match in subject/body.
+
+        Return ONLY this JSON object (no extra text before or after):
+
+        {{
+        "assigned_team_id": "<id from list>",
+        "assigned_team_name": "<matching name from list>",
+        "reasoning": "<short reason explaining the match>"
+        }}
+        """.strip()
+
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            response_format={"type": "json_object"}
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            #temperature=0,
+            response_format={"type": "json_object"},
         )
+
+
         raw = resp.choices[0].message.content
         parsed = safe_parse_json(raw)
 
@@ -112,17 +188,17 @@ No extra text, no code fences, no markdown.
         print("⚠️ Model selected an invalid team — retrying once with explicit team list...")
 
         retry_prompt = f"""
-The previous response contained an invalid team name.
+        The previous response contained an invalid team name.
 
-You must select one valid team **only** from this list:
-{json.dumps(candidates, ensure_ascii=False)}
+        You must select one valid team **only** from this list:
+        {json.dumps(candidates, ensure_ascii=False)}
 
-New ticket:
-{query_text}
+        New ticket:
+        {query_text}
 
-Return ONLY a strict JSON object:
-{{"assigned_team_id": "<id from list>", "assigned_team_name": "<matching name>", "reasoning": "<short reason>"}}
-""".strip()
+        Return ONLY a strict JSON object:
+        {{"assigned_team_id": "<id from list>", "assigned_team_name": "<matching name>", "reasoning": "<short reason>"}}
+        """.strip()
 
         retry_resp = client.chat.completions.create(
             model="gpt-4o-mini",

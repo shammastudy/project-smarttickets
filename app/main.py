@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 import app.schemas as schemas
-
+from app.evaluation import run_assignment_evaluation
 from app.data_agent import TicketDataAgent
 from app.assignment_agent import AssignmentAgent
 from app.solution_agent import SolutionAgent
 from app.retriever import embed_text, top_k_similar
 from app.db import engine
+
 
 app = FastAPI(title="Smart Tickets – API", version="1.0.0")
 
@@ -243,3 +244,27 @@ def notify_ticket_canceled(payload: schemas.TicketCanceledUserPayload):
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Mail send failed: {e}")
 
+@app.post("/evaluate/assignment", response_model=schemas.AssignmentEvalResponse)
+def evaluate_assignment(req: schemas.AssignmentEvalRequest) -> schemas.AssignmentEvalResponse:
+    """
+    Evaluate the AssignmentAgent against existing tickets.
+
+    - Select up to `limit` tickets that already have assigned_team_id.
+    - For each, run the assignment agent and compare predicted vs actual team.
+    - Return:
+        - total_evaluated
+        - correct
+        - incorrect
+        - accuracy (%)
+    """
+    try:
+        stats = run_assignment_evaluation(
+            data_agent=data_agent,
+            assign_agent=assign_agent,
+            limit=req.limit,
+            top_k=req.top_k,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {e}")
+
+    return schemas.AssignmentEvalResponse(**stats)
