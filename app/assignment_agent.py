@@ -184,27 +184,64 @@ class AssignmentAgent:
     # ✅ NEW helper method for retry logic
     # ------------------------------
     def _retry_llm_assignment(self, candidates, query_text):
-        """Ask the LLM again with a stronger prompt if first choice was invalid."""
+        """Ask the LLM again with a stricter prompt if the first choice was invalid."""
         print("⚠️ Model selected an invalid team — retrying once with explicit team list...")
 
-        retry_prompt = f"""
-        The previous response contained an invalid team name.
+        # Build a compact JSON list of valid teams from DB candidates
+        options_json = json.dumps(
+            [
+                {
+                    "id": t["team_id"],
+                    "name": t["team_name"],
+                    # keep description optional if you have it in your row dict
+                    "description": t.get("team_description", "")
+                }
+                for t in candidates
+            ],
+            ensure_ascii=False
+        )
 
-        You must select one valid team **only** from this list:
-        {json.dumps(candidates, ensure_ascii=False)}
+        retry_system_prompt = """
+        You are a senior IT Helpdesk routing expert tasked with assigning each ticket
+        to the most appropriate support team based on its content.
+
+        Rules:
+        - Choose exactly ONE support team from the provided JSON list.
+        - Never invent new teams. Only use teams from the list.
+        - Always return a valid JSON object with the required keys.
+        """.strip()
+
+        retry_user_msg = f"""
+        The previous response contained an invalid team name or ID.
 
         New ticket:
         {query_text}
 
-        Return ONLY a strict JSON object:
-        {{"assigned_team_id": "<id from list>", "assigned_team_name": "<matching name>", "reasoning": "<short reason>"}}
+        Valid teams (JSON list with their descriptions):
+        {options_json}
+
+        Guidelines:
+        - Carefully read the ticket subject and body.
+        - Match the ticket to the team whose responsibilities best fit the issue.
+        - If multiple teams look possible, pick the one that is the clearest match.
+
+        Return ONLY this JSON object (no extra text before or after):
+
+        {{
+        "assigned_team_id": "<id from list>",
+        "assigned_team_name": "<matching name from list>",
+        "reasoning": "<short reason explaining the match>"
+        }}
         """.strip()
 
         retry_resp = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": retry_prompt}],
+            messages=[
+                {"role": "system", "content": retry_system_prompt},
+                {"role": "user", "content": retry_user_msg},
+            ],
             temperature=0,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
 
         retry_raw = retry_resp.choices[0].message.content
