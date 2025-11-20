@@ -299,25 +299,22 @@ def llm_grade_solution(
         Your task:
         - Compare an existing (reference) solution with a newly suggested solution for the same ticket.
         - Focus on whether the suggested solution would correctly resolve the user's issue.
-        - Ignore wording/phrasing differences; consider meaning and key steps.
-        Compare the two lists:
-        - Are the same main actions present?
+        - Ignore wording/phrasing differences; consider meaning and key steps only.
 
 
 
         You must output a strict JSON object with these fields ONLY:
         - "similarity": a number between 0 and 1 indicating how close the suggested solution is to the reference in meaning and effectiveness.
-            - 1.0 = essentially the same solution
-            - 0.8 = very similar / acceptable alternative
-            - 0.5 = partially correct, but missing important parts
-            - 0.2 or below = mostly incorrect or unrelated
+            - 0.9–1.0 = essentially the same solution or a clearly equivalent variant that would fully solve the issue.
+            - 0.6–0.89 = very similar and acceptable; small differences or minor missing details but still likely to solve the issue.
+            - 0.3–0.59 = partial match; captures some key ideas but misses important steps or details.
+            - 0.1–0.29 = mostly incorrect, incomplete, or missing the main idea.
+            - 0.0 = completely unrelated or clearly wrong / harmful.
         - "category": one of "good_match", "partial_match", "mismatch"
             - good_match  -> similarity >= 0.6
             - partial_match -> 0.3 <= similarity < 0.6
             - mismatch -> similarity < 0.3
 
-        Be strict and consistent:
-        - Do NOT give a high similarity score just because both solutions mention the same system or application.
         """.strip()
 
 
